@@ -10,7 +10,6 @@ import {
   LayoutGrid,
   ChevronDown,
   ChevronUp,
-  ChevronRight,
   Settings,
   HelpCircle,
   ArrowLeft,
@@ -20,48 +19,32 @@ import {
   ArrowUpDown,
   Download,
   ExternalLink,
+  Folder,
+  Server,
+  Network,
 } from 'lucide-react';
 
-interface InterfaceItem {
+interface TreeNode {
   id: string;
   name: string;
-  selected: boolean;
-}
-
-interface ProbeItem {
-  id: string;
-  name: string;
-  interfaces: InterfaceItem[];
-}
-
-interface AnalysisGroupItem {
-  id: string;
-  name: string;
-  selected: boolean;
-  ip: string;
-  link: string;
-  totalFlow: string;
-  speed: string;
-  packetCount: number;
-  avgPacketRate: string;
-  networkLatency: string;
-  serverRespTime: string;
-  status: string;
-  startTime: string;
-  lastUpdated: string;
-  site: string;
-}
-
-interface AnalysisGroupCategory {
-  id: 'interface' | 'vlan';
-  name: string;
-  groups: AnalysisGroupItem[];
-}
-
-interface ControllerNode {
-  id: string;
-  name: string;
-  categories: AnalysisGroupCategory[];
+  type: 'controller' | 'category' | 'group' | 'probe' | 'interface';
+  selected?: boolean;
+  expanded?: boolean;
+  children?: TreeNode[];
+  // Metadata for search results table
+  ip?: string;
+  link?: string;
+  totalFlow?: string;
+  speed?: string;
+  packetCount?: number;
+  avgPacketRate?: string;
+  networkLatency?: string;
+  serverRespTime?: string;
+  status?: string;
+  startTime?: string;
+  lastUpdated?: string;
+  site?: string;
+  controllerName?: string;
 }
 
 export default function App() {
@@ -69,54 +52,33 @@ export default function App() {
   const [searchVal, setSearchVal] = useState('172.17.3.2');
   const [historySearchTag, setHistorySearchTag] = useState<string | null>('172.17.3.2');
 
-  // Dropdown cascader open/close state
+  // Dropdown open/close state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Column 1 active category: 'probe' (所有探针) or 'group' (分析组)
-  const [activeMainCategory, setActiveMainCategory] = useState<'probe' | 'group'>('group');
+  // Top Tabs inside the Dropdown: 'analysisGroup' (分析组, 前) or 'controller' (中控, 后)
+  const [dropdownTab, setDropdownTab] = useState<'analysisGroup' | 'controller'>('analysisGroup');
 
-  // Probes state (Level 1: 所有探针 -> Level 2: 探针IP -> Level 3: 接口)
-  const [probes, setProbes] = useState<ProbeItem[]>([
+  // =========================================================================
+  // Tab 1: 分析组 - 纵向树形结构 (按照原有逻辑层级：中控 -> 接口/VLAN分析组 -> 具名分析组)
+  // =========================================================================
+  const [analysisTree, setAnalysisTree] = useState<TreeNode[]>([
     {
-      id: 'probe-1',
-      name: '172.17.3.87',
-      interfaces: [
-        { id: 'p1-int1', name: '接口1', selected: false },
-        { id: 'p1-int2', name: '接口2', selected: false },
-      ],
-    },
-    {
-      id: 'probe-2',
-      name: 'live55',
-      interfaces: [
-        { id: 'p2-int1', name: '接口1', selected: false },
-        { id: 'p2-int2', name: '接口2', selected: false },
-      ],
-    },
-    {
-      id: 'probe-3',
-      name: 'live56',
-      interfaces: [{ id: 'p3-int1', name: '接口1', selected: false }],
-    },
-  ]);
-
-  // Selected probe for column 2 when in 'probe' mode
-  const [selectedProbeId, setSelectedProbeId] = useState<string>('probe-1');
-
-  // Controllers state (Level 1: 分析组 -> Level 2: 3个中控 -> Level 3: 接口分析组/VLAN分析组 -> Level 4: 具备网络指标的分析组)
-  const [controllers, setControllers] = useState<ControllerNode[]>([
-    {
-      id: 'ctrl-1',
+      id: 'tree-ctrl-1',
       name: '中控1 (德胜DC)',
-      categories: [
+      type: 'controller',
+      expanded: true,
+      children: [
         {
-          id: 'interface',
+          id: 'c1-cat-interface',
           name: '接口分析组',
-          groups: [
+          type: 'category',
+          expanded: true,
+          children: [
             {
               id: 'c1-int-1',
               name: '德胜DC-P1到上海总部DC-P1',
+              type: 'group',
               selected: true,
               ip: '172.17.3.2',
               link: 'Core Switch(V1003)',
@@ -130,10 +92,12 @@ export default function App() {
               startTime: '2026-11-04 09:35:32.144030',
               lastUpdated: '2026-11-04 17:05:59.991396',
               site: 'Server172.17',
+              controllerName: '中控1 (德胜DC)',
             },
             {
               id: 'c1-int-2',
               name: '德胜DC-P1到西安主中心DC-P1',
+              type: 'group',
               selected: true,
               ip: '172.17.3.2',
               link: 'Business Zone 1(V1002)',
@@ -147,10 +111,12 @@ export default function App() {
               startTime: '2026-11-04 09:35:36.103100',
               lastUpdated: '2026-11-04 17:05:30.350960',
               site: 'Server172.17',
+              controllerName: '中控1 (德胜DC)',
             },
             {
               id: 'c1-int-3',
               name: '稻香湖DC-P2到张江DC-P1',
+              type: 'group',
               selected: true,
               ip: '172.17.3.2',
               link: 'Business Zone 2(V1004)',
@@ -164,10 +130,12 @@ export default function App() {
               startTime: '2026-11-04 09:35:36.103985',
               lastUpdated: '2026-11-04 17:05:59.991397',
               site: 'Server172.17',
+              controllerName: '中控1 (德胜DC)',
             },
             {
               id: 'c1-int-4',
               name: '稻香湖DC-P2到西安转接中心DC-P1',
+              type: 'group',
               selected: true,
               ip: '172.17.3.2',
               link: 'Link LB(V1005)',
@@ -181,10 +149,12 @@ export default function App() {
               startTime: '2026-11-04 09:35:36.103986',
               lastUpdated: '2026-11-04 17:05:59.991404',
               site: 'Server172.17',
+              controllerName: '中控1 (德胜DC)',
             },
             {
               id: 'c1-int-5',
               name: '张江DC-P1到西安转接中心DC-P1',
+              type: 'group',
               selected: false,
               ip: '172.17.3.2',
               link: 'TransLink(V1006)',
@@ -198,10 +168,12 @@ export default function App() {
               startTime: '2026-11-04 09:35:40.100120',
               lastUpdated: '2026-11-04 17:05:58.120010',
               site: 'Server172.17',
+              controllerName: '中控1 (德胜DC)',
             },
             {
               id: 'c1-int-6',
               name: '上海总部DC-P2到西安主中心DC-P1',
+              type: 'group',
               selected: false,
               ip: '172.17.3.2',
               link: 'HQ Backbone(V1007)',
@@ -215,16 +187,20 @@ export default function App() {
               startTime: '2026-11-04 09:35:45.300150',
               lastUpdated: '2026-11-04 17:05:59.400200',
               site: 'Server172.17',
+              controllerName: '中控1 (德胜DC)',
             },
           ],
         },
         {
-          id: 'vlan',
+          id: 'c1-cat-vlan',
           name: 'VLAN分析组',
-          groups: [
+          type: 'category',
+          expanded: false,
+          children: [
             {
               id: 'c1-vlan-1',
               name: '德胜DC-VLAN100_核心生产链路',
+              type: 'group',
               selected: false,
               ip: '172.17.3.2',
               link: 'VLAN100_Prod',
@@ -238,22 +214,47 @@ export default function App() {
               startTime: '2026-11-04 09:30:00.000000',
               lastUpdated: '2026-11-04 17:05:59.000000',
               site: 'Server172.17',
+              controllerName: '中控1 (德胜DC)',
+            },
+            {
+              id: 'c1-vlan-2',
+              name: '德胜DC-VLAN200_跨中心互联',
+              type: 'group',
+              selected: false,
+              ip: '172.17.3.2',
+              link: 'VLAN200_Inter',
+              totalFlow: '11.20 MB',
+              speed: '280.10 Kbps',
+              packetCount: 25400,
+              avgPacketRate: '84.66 pps',
+              networkLatency: '3.20 ms',
+              serverRespTime: '11.50 ms',
+              status: '活跃',
+              startTime: '2026-11-04 09:32:00.000000',
+              lastUpdated: '2026-11-04 17:05:58.000000',
+              site: 'Server172.17',
+              controllerName: '中控1 (德胜DC)',
             },
           ],
         },
       ],
     },
     {
-      id: 'ctrl-2',
+      id: 'tree-ctrl-2',
       name: '中控2 (稻香湖DC)',
-      categories: [
+      type: 'controller',
+      expanded: false,
+      children: [
         {
-          id: 'interface',
+          id: 'c2-cat-interface',
           name: '接口分析组',
-          groups: [
+          type: 'category',
+          expanded: true,
+          children: [
             {
               id: 'c2-int-1',
               name: '稻香湖DC-P1到德胜DC-P1',
+              type: 'group',
               selected: true,
               ip: '172.17.3.2',
               link: 'Core Switch(V1003)',
@@ -267,10 +268,12 @@ export default function App() {
               startTime: '2026-11-04 09:35:32.144030',
               lastUpdated: '2026-11-04 17:05:59.991396',
               site: 'Server172.17',
+              controllerName: '中控2 (稻香湖DC)',
             },
             {
               id: 'c2-int-2',
               name: '稻香湖DC-P1到上海总部DC-P2',
+              type: 'group',
               selected: false,
               ip: '172.17.3.2',
               link: 'Business Zone 1(V1002)',
@@ -284,10 +287,12 @@ export default function App() {
               startTime: '2026-11-04 09:35:36.103100',
               lastUpdated: '2026-11-04 17:05:30.350960',
               site: 'Server172.17',
+              controllerName: '中控2 (稻香湖DC)',
             },
             {
               id: 'c2-int-3',
               name: '稻香湖DC-P2到西安主中心DC-P2',
+              type: 'group',
               selected: false,
               ip: '172.17.3.2',
               link: 'Business Zone 2(V1004)',
@@ -301,16 +306,20 @@ export default function App() {
               startTime: '2026-11-04 09:35:36.103985',
               lastUpdated: '2026-11-04 17:05:59.991397',
               site: 'Server172.17',
+              controllerName: '中控2 (稻香湖DC)',
             },
           ],
         },
         {
-          id: 'vlan',
+          id: 'c2-cat-vlan',
           name: 'VLAN分析组',
-          groups: [
+          type: 'category',
+          expanded: false,
+          children: [
             {
               id: 'c2-vlan-1',
               name: '稻香湖DC-VLAN10_数据交换专网',
+              type: 'group',
               selected: false,
               ip: '172.17.3.2',
               link: 'VLAN10_Exchange',
@@ -324,25 +333,31 @@ export default function App() {
               startTime: '2026-11-04 09:32:10.000000',
               lastUpdated: '2026-11-04 17:05:58.000000',
               site: 'Server172.17',
+              controllerName: '中控2 (稻香湖DC)',
             },
           ],
         },
       ],
     },
     {
-      id: 'ctrl-3',
+      id: 'tree-ctrl-3',
       name: '中控3 (张江DC)',
-      categories: [
+      type: 'controller',
+      expanded: false,
+      children: [
         {
-          id: 'interface',
+          id: 'c3-cat-interface',
           name: '接口分析组',
-          groups: [
+          type: 'category',
+          expanded: true,
+          children: [
             {
               id: 'c3-int-1',
               name: '张江DC-P1到上海总部DC-P1',
+              type: 'group',
               selected: false,
               ip: '172.17.3.2',
-              link: 'Core Switch(V1003)',
+              link: 'Financial Bus(V2001)',
               totalFlow: '14.20 MB',
               speed: '390.10 Kbps',
               packetCount: 35600,
@@ -353,10 +368,12 @@ export default function App() {
               startTime: '2026-11-04 09:35:30.000000',
               lastUpdated: '2026-11-04 17:05:59.000000',
               site: 'Server172.17',
+              controllerName: '中控3 (张江DC)',
             },
             {
               id: 'c3-int-2',
               name: '张江DC-P1到德胜DC-P2',
+              type: 'group',
               selected: false,
               ip: '172.17.3.2',
               link: 'Backup Sync(V2005)',
@@ -370,16 +387,20 @@ export default function App() {
               startTime: '2026-11-04 09:38:22.341100',
               lastUpdated: '2026-11-04 17:05:57.432190',
               site: 'Server172.17',
+              controllerName: '中控3 (张江DC)',
             },
           ],
         },
         {
-          id: 'vlan',
+          id: 'c3-cat-vlan',
           name: 'VLAN分析组',
-          groups: [
+          type: 'category',
+          expanded: false,
+          children: [
             {
               id: 'c3-vlan-1',
               name: '张江DC-VLAN101_金融交易通道',
+              type: 'group',
               selected: false,
               ip: '172.17.3.2',
               link: 'VLAN101_Finance',
@@ -393,6 +414,7 @@ export default function App() {
               startTime: '2026-11-04 09:30:10.000000',
               lastUpdated: '2026-11-04 17:05:59.000000',
               site: 'Server172.17',
+              controllerName: '中控3 (张江DC)',
             },
           ],
         },
@@ -400,125 +422,300 @@ export default function App() {
     },
   ]);
 
-  // Active controller for the cascader in Column 2
-  const [selectedControllerId, setSelectedControllerId] = useState<string>('ctrl-1');
-  const [selectedGroupCategoryId, setSelectedGroupCategoryId] = useState<'interface' | 'vlan'>('interface');
+  // =========================================================================
+  // Tab 2: 中控 - 纵向树形结构 (环境分类：产品 / 交行VIP / 升级环境 -> 探针 -> 接口)
+  // =========================================================================
+  const [controllerTree, setControllerTree] = useState<TreeNode[]>([
+    {
+      id: 'tree-env-product',
+      name: '产品',
+      type: 'controller',
+      expanded: true,
+      children: [
+        {
+          id: 'probe-632',
+          name: '探针6.32（无智溯）',
+          type: 'probe',
+          expanded: false,
+          children: [
+            {
+              id: 'p632-int1',
+              name: '接口1',
+              type: 'interface',
+              selected: false,
+              ip: '172.17.3.2',
+              link: '探针6.32(接口1)',
+              totalFlow: '12.40 MB',
+              speed: '330.15 Kbps',
+              packetCount: 29400,
+              avgPacketRate: '98.00 pps',
+              networkLatency: '3.80 ms',
+              serverRespTime: '44.20 ms',
+              status: '活跃',
+              startTime: '2026-11-04 09:35:30.000000',
+              lastUpdated: '2026-11-04 17:05:59.000000',
+              site: 'Server172.17',
+              controllerName: '产品',
+            },
+            {
+              id: 'p632-int2',
+              name: '接口2',
+              type: 'interface',
+              selected: false,
+              ip: '172.17.3.2',
+              link: '探针6.32(接口2)',
+              totalFlow: '8.10 MB',
+              speed: '210.40 Kbps',
+              packetCount: 19100,
+              avgPacketRate: '63.66 pps',
+              networkLatency: '4.10 ms',
+              serverRespTime: '38.00 ms',
+              status: '活跃',
+              startTime: '2026-11-04 09:35:35.000000',
+              lastUpdated: '2026-11-04 17:05:58.000000',
+              site: 'Server172.17',
+              controllerName: '产品',
+            },
+          ],
+        },
+        {
+          id: 'probe-147',
+          name: '探针147',
+          type: 'probe',
+          expanded: true,
+          children: [
+            {
+              id: 'p147-int1',
+              name: '接口1',
+              type: 'interface',
+              selected: false,
+              ip: '172.17.3.2',
+              link: '探针147(接口1)',
+              totalFlow: '15.60 MB',
+              speed: '410.20 Kbps',
+              packetCount: 36200,
+              avgPacketRate: '120.66 pps',
+              networkLatency: '2.90 ms',
+              serverRespTime: '31.40 ms',
+              status: '活跃',
+              startTime: '2026-11-04 09:35:20.000000',
+              lastUpdated: '2026-11-04 17:05:59.000000',
+              site: 'Server172.17',
+              controllerName: '产品',
+            },
+            {
+              id: 'p147-int2',
+              name: '接口2',
+              type: 'interface',
+              selected: false,
+              ip: '172.17.3.2',
+              link: '探针147(接口2)',
+              totalFlow: '11.80 MB',
+              speed: '295.40 Kbps',
+              packetCount: 27500,
+              avgPacketRate: '91.66 pps',
+              networkLatency: '3.40 ms',
+              serverRespTime: '36.80 ms',
+              status: '活跃',
+              startTime: '2026-11-04 09:35:25.000000',
+              lastUpdated: '2026-11-04 17:05:59.000000',
+              site: 'Server172.17',
+              controllerName: '产品',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'tree-env-vip',
+      name: '交行VIP',
+      type: 'controller',
+      expanded: false,
+      children: [
+        {
+          id: 'probe-vip1',
+          name: '探针VIP-01',
+          type: 'probe',
+          expanded: false,
+          children: [
+            {
+              id: 'pvip1-int1',
+              name: '接口1',
+              type: 'interface',
+              selected: false,
+              ip: '172.17.3.2',
+              link: 'VIP-01(接口1)',
+              totalFlow: '21.50 MB',
+              speed: '580.10 Kbps',
+              packetCount: 51000,
+              avgPacketRate: '170.00 pps',
+              networkLatency: '1.60 ms',
+              serverRespTime: '15.20 ms',
+              status: '活跃',
+              startTime: '2026-11-04 09:30:10.000000',
+              lastUpdated: '2026-11-04 17:05:59.000000',
+              site: 'Server172.17',
+              controllerName: '交行VIP',
+            },
+            {
+              id: 'pvip1-int2',
+              name: '接口2',
+              type: 'interface',
+              selected: false,
+              ip: '172.17.3.2',
+              link: 'VIP-01(接口2)',
+              totalFlow: '16.30 MB',
+              speed: '430.50 Kbps',
+              packetCount: 38500,
+              avgPacketRate: '128.33 pps',
+              networkLatency: '2.10 ms',
+              serverRespTime: '21.60 ms',
+              status: '活跃',
+              startTime: '2026-11-04 09:30:15.000000',
+              lastUpdated: '2026-11-04 17:05:59.000000',
+              site: 'Server172.17',
+              controllerName: '交行VIP',
+            },
+          ],
+        },
+        {
+          id: 'probe-vip2',
+          name: '探针VIP-02',
+          type: 'probe',
+          expanded: false,
+          children: [
+            {
+              id: 'pvip2-int1',
+              name: '接口1',
+              type: 'interface',
+              selected: false,
+              ip: '172.17.3.2',
+              link: 'VIP-02(接口1)',
+              totalFlow: '14.80 MB',
+              speed: '390.20 Kbps',
+              packetCount: 35000,
+              avgPacketRate: '116.66 pps',
+              networkLatency: '2.40 ms',
+              serverRespTime: '24.10 ms',
+              status: '活跃',
+              startTime: '2026-11-04 09:32:00.000000',
+              lastUpdated: '2026-11-04 17:05:58.000000',
+              site: 'Server172.17',
+              controllerName: '交行VIP',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'tree-env-upgrade',
+      name: '升级环境',
+      type: 'controller',
+      expanded: false,
+      children: [
+        {
+          id: 'probe-up1',
+          name: '升级探针Alpha',
+          type: 'probe',
+          expanded: false,
+          children: [
+            {
+              id: 'pup1-int1',
+              name: '接口1',
+              type: 'interface',
+              selected: false,
+              ip: '172.17.3.2',
+              link: 'Alpha(接口1)',
+              totalFlow: '6.40 MB',
+              speed: '160.20 Kbps',
+              packetCount: 15200,
+              avgPacketRate: '50.66 pps',
+              networkLatency: '5.20 ms',
+              serverRespTime: '48.50 ms',
+              status: '活跃',
+              startTime: '2026-11-04 09:38:00.000000',
+              lastUpdated: '2026-11-04 17:05:55.000000',
+              site: 'Server172.17',
+              controllerName: '升级环境',
+            },
+            {
+              id: 'pup1-int2',
+              name: '接口2',
+              type: 'interface',
+              selected: false,
+              ip: '172.17.3.2',
+              link: 'Alpha(接口2)',
+              totalFlow: '4.80 MB',
+              speed: '120.40 Kbps',
+              packetCount: 11400,
+              avgPacketRate: '38.00 pps',
+              networkLatency: '5.60 ms',
+              serverRespTime: '52.10 ms',
+              status: '活跃',
+              startTime: '2026-11-04 09:38:10.000000',
+              lastUpdated: '2026-11-04 17:05:55.000000',
+              site: 'Server172.17',
+              controllerName: '升级环境',
+            },
+          ],
+        },
+      ],
+    },
+  ]);
 
-  // Multi-controller Result Tab State (Tab switching between selected controllers)
-  const [activeResultCtrlId, setActiveResultCtrlId] = useState<string>('ctrl-1');
+  // Multi-controller Result Tab State in the Results Table
+  const [activeResultCtrlId, setActiveResultCtrlId] = useState<string>('中控1 (德胜DC)');
 
   // Table row multi-selection
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
 
   // Sorting
-  const [sortField, setSortField] = useState<keyof AnalysisGroupItem>('totalFlow');
+  const [sortField, setSortField] = useState<keyof TreeNode>('totalFlow');
   const [sortAsc, setSortAsc] = useState<boolean>(false);
 
-  // Helper functions for clearing (mutual exclusion)
-  const clearAllProbes = () => {
-    setProbes((prev) =>
-      prev.map((probe) => ({
-        ...probe,
-        interfaces: probe.interfaces.map((i) => ({ ...i, selected: false })),
-      }))
-    );
-  };
-
-  const clearAllAnalysisGroups = () => {
-    setControllers((prev) =>
-      prev.map((ctrl) => ({
-        ...ctrl,
-        categories: ctrl.categories.map((cat) => ({
-          ...cat,
-          groups: cat.groups.map((g) => ({ ...g, selected: false })),
-        })),
-      }))
-    );
-  };
-
-  // Metrics: Selected counts
-  const totalSelectedLinks = probes.reduce(
-    (acc, probe) => acc + probe.interfaces.filter((i) => i.selected).length,
-    0
-  );
-
-  const totalSelectedGroups = controllers.reduce(
-    (acc, ctrl) =>
-      acc +
-      ctrl.categories.reduce(
-        (catAcc, cat) => catAcc + cat.groups.filter((g) => g.selected).length,
-        0
-      ),
-    0
-  );
-
-  // Probe status
-  const totalInterfaces = probes.reduce((acc, probe) => acc + probe.interfaces.length, 0);
-  const isAllProbesSelected = totalSelectedLinks === totalInterfaces && totalInterfaces > 0;
-  const isAllProbesIndeterminate = totalSelectedLinks > 0 && totalSelectedLinks < totalInterfaces;
-
-  // Analysis group status across all 3 controllers
-  const totalAnalysisGroups = controllers.reduce(
-    (acc, ctrl) =>
-      acc + ctrl.categories.reduce((catAcc, cat) => catAcc + cat.groups.length, 0),
-    0
-  );
-  const isAllGroupsSelected = totalSelectedGroups === totalAnalysisGroups && totalAnalysisGroups > 0;
-  const isAllGroupsIndeterminate = totalSelectedGroups > 0 && totalSelectedGroups < totalAnalysisGroups;
-
-  // Active probe for column 3 (in probe mode)
-  const activeProbe = probes.find((p) => p.id === selectedProbeId) || probes[0];
-
-  // Active controller & active category (in cascader group mode)
-  const activeController = controllers.find((c) => c.id === selectedControllerId) || controllers[0];
-  const activeCategory =
-    activeController.categories.find((c) => c.id === selectedGroupCategoryId) ||
-    activeController.categories[0];
-
-  // Controllers that currently have selected analysis groups
-  const controllersWithSelectedGroups = useMemo(() => {
-    return controllers.filter((ctrl) =>
-      ctrl.categories.some((cat) => cat.groups.some((g) => g.selected))
-    );
-  }, [controllers]);
-
-  // Keep activeResultCtrlId valid
-  useEffect(() => {
-    if (controllersWithSelectedGroups.length > 0) {
-      const exists = controllersWithSelectedGroups.some((c) => c.id === activeResultCtrlId);
-      if (!exists) {
-        setActiveResultCtrlId(controllersWithSelectedGroups[0].id);
+  // Helper: Get all leaf nodes
+  const getAllLeaves = (nodes: TreeNode[]): TreeNode[] => {
+    let result: TreeNode[] = [];
+    nodes.forEach((node) => {
+      if (node.children && node.children.length > 0) {
+        result = result.concat(getAllLeaves(node.children));
+      } else {
+        result.push(node);
       }
-    }
-  }, [controllersWithSelectedGroups, activeResultCtrlId]);
-
-  // Currently displayed result controller
-  const currentResultCtrl =
-    controllers.find((c) => c.id === activeResultCtrlId) || controllersWithSelectedGroups[0] || controllers[0];
-
-  // Groups under current result controller that are selected (or all if none explicitly selected)
-  const currentResultGroups = useMemo(() => {
-    const allGroupsInCtrl = currentResultCtrl.categories.flatMap((cat) => cat.groups);
-    const selected = allGroupsInCtrl.filter((g) => g.selected);
-    const list = selected.length > 0 ? selected : allGroupsInCtrl;
-
-    // Filter by searchVal if applicable
-    const filtered = searchVal.trim()
-      ? list.filter((g) => g.ip.includes(searchVal.trim()) || g.name.includes(searchVal.trim()))
-      : list;
-
-    // Sort
-    return [...filtered].sort((a, b) => {
-      const valA = a[sortField];
-      const valB = b[sortField];
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return sortAsc ? valA - valB : valB - valA;
-      }
-      return sortAsc
-        ? String(valA).localeCompare(String(valB))
-        : String(valB).localeCompare(String(valA));
     });
-  }, [currentResultCtrl, searchVal, sortField, sortAsc]);
+    return result;
+  };
+
+  const selectedAnalysisLeaves = useMemo(
+    () => getAllLeaves(analysisTree).filter((n) => n.selected),
+    [analysisTree]
+  );
+
+  const selectedCtrlLeaves = useMemo(
+    () => getAllLeaves(controllerTree).filter((n) => n.selected),
+    [controllerTree]
+  );
+
+  // Mutual exclusion: Clear functions
+  const clearAnalysisTree = () => {
+    const deselectNode = (nodes: TreeNode[]): TreeNode[] =>
+      nodes.map((node) => ({
+        ...node,
+        selected: false,
+        children: node.children ? deselectNode(node.children) : undefined,
+      }));
+    setAnalysisTree((prev) => deselectNode(prev));
+  };
+
+  const clearControllerTree = () => {
+    const deselectNode = (nodes: TreeNode[]): TreeNode[] =>
+      nodes.map((node) => ({
+        ...node,
+        selected: false,
+        children: node.children ? deselectNode(node.children) : undefined,
+      }));
+    setControllerTree((prev) => deselectNode(prev));
+  };
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -535,166 +732,171 @@ export default function App() {
     };
   }, [isDropdownOpen]);
 
-  // Mutual exclusion handlers
-  const handleToggleAllProbes = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    clearAllAnalysisGroups();
-    const shouldSelect = totalSelectedLinks === 0;
-    setProbes((prev) =>
-      prev.map((probe) => ({
-        ...probe,
-        interfaces: probe.interfaces.map((intf) => ({ ...intf, selected: shouldSelect })),
-      }))
-    );
+  // Check state calculation for tree node (checked, indeterminate, unchecked)
+  const getNodeCheckState = (node: TreeNode): { isChecked: boolean; isIndeterminate: boolean } => {
+    const leaves = getAllLeaves([node]);
+    if (leaves.length === 0) return { isChecked: false, isIndeterminate: false };
+    const selCount = leaves.filter((l) => l.selected).length;
+    const isChecked = selCount === leaves.length;
+    const isIndeterminate = selCount > 0 && selCount < leaves.length;
+    return { isChecked, isIndeterminate };
   };
 
-  const handleToggleProbe = (probeId: string, e: React.MouseEvent) => {
+  // Generic Expand/Collapse
+  const handleToggleExpand = (
+    tree: 'analysis' | 'controller',
+    nodeId: string,
+    e: React.MouseEvent
+  ) => {
     e.stopPropagation();
-    clearAllAnalysisGroups();
-    setProbes((prev) =>
-      prev.map((probe) => {
-        if (probe.id === probeId) {
-          const hasUnselected = probe.interfaces.some((i) => !i.selected);
+    const updateExpand = (nodes: TreeNode[]): TreeNode[] =>
+      nodes.map((n) => {
+        if (n.id === nodeId) {
+          return { ...n, expanded: !n.expanded };
+        }
+        if (n.children) {
+          return { ...n, children: updateExpand(n.children) };
+        }
+        return n;
+      });
+
+    if (tree === 'analysis') {
+      setAnalysisTree((prev) => updateExpand(prev));
+    } else {
+      setControllerTree((prev) => updateExpand(prev));
+    }
+  };
+
+  // Generic Checkbox Toggle (with Hierarchical Cascade + Mutual Exclusion)
+  const handleToggleCheckbox = (
+    tree: 'analysis' | 'controller',
+    node: TreeNode,
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+
+    // Mutual exclusion between tabs
+    if (tree === 'analysis') {
+      clearControllerTree();
+    } else {
+      clearAnalysisTree();
+    }
+
+    const leaves = getAllLeaves([node]);
+    const allSelected = leaves.every((l) => l.selected);
+    const targetState = !allSelected;
+
+    const setLeafState = (nodes: TreeNode[]): TreeNode[] =>
+      nodes.map((n) => {
+        if (n.id === node.id) {
+          const makeState = (subNodes: TreeNode[]): TreeNode[] =>
+            subNodes.map((sn) => ({
+              ...sn,
+              selected: targetState,
+              children: sn.children ? makeState(sn.children) : undefined,
+            }));
           return {
-            ...probe,
-            interfaces: probe.interfaces.map((i) => ({ ...i, selected: hasUnselected })),
+            ...n,
+            selected: targetState,
+            children: n.children ? makeState(n.children) : undefined,
           };
         }
-        return probe;
-      })
-    );
-  };
-
-  const handleToggleInterface = (probeId: string, interfaceId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    clearAllAnalysisGroups();
-    setProbes((prev) =>
-      prev.map((probe) => {
-        if (probe.id === probeId) {
-          return {
-            ...probe,
-            interfaces: probe.interfaces.map((i) =>
-              i.id === interfaceId ? { ...i, selected: !i.selected } : i
-            ),
-          };
+        if (n.children) {
+          return { ...n, children: setLeafState(n.children) };
         }
-        return probe;
-      })
-    );
+        return n;
+      });
+
+    if (tree === 'analysis') {
+      setAnalysisTree((prev) => setLeafState(prev));
+    } else {
+      setControllerTree((prev) => setLeafState(prev));
+    }
   };
 
-  const handleToggleAllGroups = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    clearAllProbes();
-    const shouldSelect = totalSelectedGroups === 0;
-    setControllers((prev) =>
-      prev.map((ctrl) => ({
-        ...ctrl,
-        categories: ctrl.categories.map((cat) => ({
-          ...cat,
-          groups: cat.groups.map((g) => ({ ...g, selected: shouldSelect })),
-        })),
-      }))
-    );
-  };
+  // Controllers grouping for the search results tabs
+  const resultControllers = useMemo(() => {
+    // If analysis groups are selected: group by controllerName
+    if (selectedAnalysisLeaves.length > 0) {
+      const map = new Map<string, TreeNode[]>();
+      selectedAnalysisLeaves.forEach((leaf) => {
+        const cName = leaf.controllerName || '中控1 (德胜DC)';
+        if (!map.has(cName)) map.set(cName, []);
+        map.get(cName)!.push(leaf);
+      });
+      return Array.from(map.entries()).map(([name, list]) => ({
+        id: name,
+        name,
+        count: list.length,
+        items: list,
+      }));
+    }
 
-  const handleToggleController = (ctrlId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    clearAllProbes();
-    setControllers((prev) =>
-      prev.map((ctrl) => {
-        if (ctrl.id === ctrlId) {
-          const allGroups = ctrl.categories.flatMap((c) => c.groups);
-          const hasUnselected = allGroups.some((g) => !g.selected);
-          return {
-            ...ctrl,
-            categories: ctrl.categories.map((cat) => ({
-              ...cat,
-              groups: cat.groups.map((g) => ({ ...g, selected: hasUnselected })),
-            })),
-          };
-        }
-        return ctrl;
-      })
-    );
-  };
+    // If controller links are selected: group by controller/environment name
+    if (selectedCtrlLeaves.length > 0) {
+      const map = new Map<string, TreeNode[]>();
+      selectedCtrlLeaves.forEach((leaf) => {
+        const cName = leaf.controllerName || '产品';
+        if (!map.has(cName)) map.set(cName, []);
+        map.get(cName)!.push(leaf);
+      });
+      return Array.from(map.entries()).map(([name, list]) => ({
+        id: name,
+        name: `${name}中控`,
+        count: list.length,
+        items: list,
+      }));
+    }
 
-  const handleToggleGroupCategory = (catId: 'interface' | 'vlan', e: React.MouseEvent) => {
-    e.stopPropagation();
-    clearAllProbes();
-    setControllers((prev) =>
-      prev.map((ctrl) => {
-        if (ctrl.id === selectedControllerId) {
-          return {
-            ...ctrl,
-            categories: ctrl.categories.map((cat) => {
-              if (cat.id === catId) {
-                const hasUnselected = cat.groups.some((g) => !g.selected);
-                return {
-                  ...cat,
-                  groups: cat.groups.map((g) => ({ ...g, selected: hasUnselected })),
-                };
-              }
-              return cat;
-            }),
-          };
-        }
-        return ctrl;
-      })
-    );
-  };
+    // Default fallback
+    return [
+      {
+        id: '中控1 (德胜DC)',
+        name: '中控1 (德胜DC)',
+        count: 4,
+        items: getAllLeaves(analysisTree).slice(0, 4),
+      },
+    ];
+  }, [selectedAnalysisLeaves, selectedCtrlLeaves, analysisTree]);
 
-  const handleToggleGroupItem = (groupId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    clearAllProbes();
-    setControllers((prev) =>
-      prev.map((ctrl) => {
-        if (ctrl.id === selectedControllerId) {
-          return {
-            ...ctrl,
-            categories: ctrl.categories.map((cat) => {
-              if (cat.id === selectedGroupCategoryId) {
-                return {
-                  ...cat,
-                  groups: cat.groups.map((g) =>
-                    g.id === groupId ? { ...g, selected: !g.selected } : g
-                  ),
-                };
-              }
-              return cat;
-            }),
-          };
-        }
-        return ctrl;
-      })
-    );
-  };
+  // Keep activeResultCtrlId valid
+  useEffect(() => {
+    if (resultControllers.length > 0) {
+      const exists = resultControllers.some((c) => c.id === activeResultCtrlId);
+      if (!exists) {
+        setActiveResultCtrlId(resultControllers[0].id);
+      }
+    }
+  }, [resultControllers, activeResultCtrlId]);
 
-  // Close tab in result view (unselects all groups in that controller)
-  const handleCloseResultTab = (ctrlId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setControllers((prev) =>
-      prev.map((c) => {
-        if (c.id === ctrlId) {
-          return {
-            ...c,
-            categories: c.categories.map((cat) => ({
-              ...cat,
-              groups: cat.groups.map((g) => ({ ...g, selected: false })),
-            })),
-          };
-        }
-        return c;
-      })
-    );
-  };
+  const currentResultCtrl =
+    resultControllers.find((c) => c.id === activeResultCtrlId) || resultControllers[0];
+
+  // Filtered and sorted table data
+  const currentTableRows = useMemo(() => {
+    const list = currentResultCtrl?.items || [];
+    const filtered = searchVal.trim()
+      ? list.filter((g) => (g.ip && g.ip.includes(searchVal.trim())) || g.name.includes(searchVal.trim()))
+      : list;
+
+    return [...filtered].sort((a, b) => {
+      const valA = a[sortField];
+      const valB = b[sortField];
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortAsc ? valA - valB : valB - valA;
+      }
+      return sortAsc
+        ? String(valA || '').localeCompare(String(valB || ''))
+        : String(valB || '').localeCompare(String(valA || ''));
+    });
+  }, [currentResultCtrl, searchVal, sortField, sortAsc]);
 
   // Table row selection toggles
   const handleSelectAllRows = () => {
-    if (selectedRowIds.length === currentResultGroups.length) {
+    if (selectedRowIds.length === currentTableRows.length) {
       setSelectedRowIds([]);
     } else {
-      setSelectedRowIds(currentResultGroups.map((g) => g.id));
+      setSelectedRowIds(currentTableRows.map((g) => g.id));
     }
   };
 
@@ -705,13 +907,130 @@ export default function App() {
   };
 
   // Sort toggle
-  const handleSort = (field: keyof AnalysisGroupItem) => {
+  const handleSort = (field: keyof TreeNode) => {
     if (sortField === field) {
       setSortAsc((prev) => !prev);
     } else {
       setSortField(field);
       setSortAsc(false);
     }
+  };
+
+  // Close tab in result view (unselects all groups in that controller)
+  const handleCloseResultTab = (ctrlId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Deselect leaves matching this controller
+    const deselectCtrl = (nodes: TreeNode[]): TreeNode[] =>
+      nodes.map((n) => {
+        const matches = n.controllerName === ctrlId || n.name === ctrlId;
+        return {
+          ...n,
+          selected: matches ? false : n.selected,
+          children: n.children ? deselectCtrl(n.children) : undefined,
+        };
+      });
+
+    setAnalysisTree((prev) => deselectCtrl(prev));
+    setControllerTree((prev) => deselectCtrl(prev));
+  };
+
+  // =========================================================================
+  // 纵向树形节点渲染器 (Vertical Tree View Renderer for both Analysis & Controller)
+  // =========================================================================
+  const renderVerticalTreeNode = (
+    tree: 'analysis' | 'controller',
+    node: TreeNode,
+    depth: number = 0
+  ) => {
+    const hasChildren = node.children && node.children.length > 0;
+    const { isChecked, isIndeterminate } = getNodeCheckState(node);
+
+    return (
+      <div key={node.id} className="select-none">
+        <div
+          className="flex items-center justify-between py-1.5 px-3 hover:bg-slate-50 cursor-pointer text-xs transition-colors"
+          style={{ paddingLeft: `${12 + depth * 18}px` }}
+        >
+          <div className="flex items-center gap-2 truncate pr-2">
+            {/* Expand / Collapse square button [+] / [-] */}
+            {hasChildren ? (
+              <button
+                type="button"
+                onClick={(e) => handleToggleExpand(tree, node.id, e)}
+                className="w-3.5 h-3.5 border border-[#0091ff] rounded-xs flex items-center justify-center text-[#0091ff] text-[10px] font-bold bg-white hover:bg-blue-50 cursor-pointer shrink-0"
+              >
+                {node.expanded ? '-' : '+'}
+              </button>
+            ) : (
+              <div className="w-3.5 h-3.5 shrink-0" />
+            )}
+
+            {/* Type Icons */}
+            {node.type === 'controller' && (
+              <Server className="w-3.5 h-3.5 text-[#0091ff] shrink-0" />
+            )}
+            {node.type === 'category' && (
+              <Folder className="w-3.5 h-3.5 text-slate-400 fill-slate-200 shrink-0" />
+            )}
+            {node.type === 'group' && (
+              /* Blue Topology Branching Nodes Icon for Analysis Groups */
+              <svg className="w-3.5 h-3.5 text-[#0091ff] shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <circle cx="3" cy="12" r="1.8" fill="currentColor" />
+                <circle cx="3" cy="4" r="1.8" fill="currentColor" />
+                <circle cx="12" cy="8" r="1.8" fill="currentColor" />
+                <path d="M3 6v4M5 4.5l5 2.5M5 11.5l5-2.5" stroke="currentColor" strokeWidth="1.4" />
+              </svg>
+            )}
+            {node.type === 'probe' && (
+              <Monitor className="w-3.5 h-3.5 text-slate-500 shrink-0 stroke-[1.8]" />
+            )}
+            {node.type === 'interface' && (
+              <Network className="w-3.5 h-3.5 text-[#0091ff] shrink-0 stroke-[1.8]" />
+            )}
+
+            {/* Node Name */}
+            <span
+              onClick={(e) =>
+                hasChildren
+                  ? handleToggleExpand(tree, node.id, e)
+                  : handleToggleCheckbox(tree, node, e)
+              }
+              className={`truncate hover:text-[#0091ff] cursor-pointer ${
+                hasChildren ? 'text-slate-700 font-medium' : 'text-slate-600'
+              }`}
+              title={node.name}
+            >
+              {node.name}
+            </span>
+          </div>
+
+          {/* Checkbox on the FAR RIGHT */}
+          <div
+            onClick={(e) => handleToggleCheckbox(tree, node, e)}
+            className={`w-3.5 h-3.5 rounded-xs flex items-center justify-center cursor-pointer transition-colors shrink-0 ml-4 ${
+              isChecked || isIndeterminate
+                ? 'bg-[#0091ff] border border-[#0091ff]'
+                : 'border border-slate-300 bg-white hover:border-[#0091ff]'
+            }`}
+          >
+            {isChecked ? (
+              <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M2 6l3 3 5-6" />
+              </svg>
+            ) : isIndeterminate ? (
+              <div className="w-2 h-0.5 bg-white rounded-full" />
+            ) : null}
+          </div>
+        </div>
+
+        {/* Render Children if expanded (纵向展开) */}
+        {hasChildren && node.expanded && (
+          <div>
+            {node.children!.map((child) => renderVerticalTreeNode(tree, child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -862,7 +1181,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Middle Row: Tabs */}
+            {/* Middle Row: Object Category Tabs */}
             <div className="mt-4 flex items-end">
               <button
                 type="button"
@@ -917,14 +1236,14 @@ export default function App() {
                   isDropdownOpen ? 'rounded-tr-xs' : 'rounded-b-xs rounded-tr-xs'
                 }`}
               >
-                {/* Left Selector: Link / Analysis Group Dropdown Trigger */}
+                {/* Left Selector: Trigger for Dropdown Modal */}
                 <button
                   type="button"
                   onClick={() => setIsDropdownOpen((prev) => !prev)}
                   className="flex items-center gap-2 px-3.5 h-full text-xs text-slate-800 shrink-0 border-r border-[#e5e7eb] bg-white hover:bg-slate-50/80 cursor-pointer select-none transition-colors"
                 >
                   {/* Icon reflects selection type */}
-                  {totalSelectedGroups > 0 ? (
+                  {selectedAnalysisLeaves.length > 0 ? (
                     <LayoutGrid className="w-4 h-4 text-[#0091ff] stroke-[1.8]" />
                   ) : (
                     <svg
@@ -941,11 +1260,13 @@ export default function App() {
                     </svg>
                   )}
 
-                  {/* Mutually exclusive count label */}
+                  {/* Mutually exclusive count label matching 5个分析组已选择 */}
                   <span>
-                    {totalSelectedGroups > 0
-                      ? `${totalSelectedGroups}个分析组已选择`
-                      : `${totalSelectedLinks}条链路已选择`}
+                    {selectedAnalysisLeaves.length > 0
+                      ? `${selectedAnalysisLeaves.length}个分析组已选择`
+                      : selectedCtrlLeaves.length > 0
+                      ? `${selectedCtrlLeaves.length}条链路已选择`
+                      : '选择分析对象'}
                   </span>
 
                   {isDropdownOpen ? (
@@ -968,319 +1289,82 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Dropdown Cascader Panel */}
+              {/* ============================================================== */}
+              {/* DROPDOWN PANEL: 纵向树形结构 (分析组在前，中控在后)              */}
+              {/* ============================================================== */}
               {isDropdownOpen && (
-                <div className="absolute top-[39px] left-0 z-50 bg-white border border-[#e5e7eb] shadow-xl rounded-b-xs flex text-xs select-none">
-                  {/* Column 1: 分类 (所有探针 & 分析组) */}
-                  <div className="w-[140px] py-1 border-r border-[#e5e7eb] min-h-[220px] bg-white">
-                    {/* 所有探针 */}
-                    <div
-                      onClick={() => setActiveMainCategory('probe')}
-                      className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${
-                        activeMainCategory === 'probe'
-                          ? 'text-[#0091ff] font-medium bg-blue-50/40'
-                          : 'text-slate-700 hover:bg-slate-50'
+                <div className="absolute top-[39px] left-0 z-50 bg-white border border-[#e5e7eb] shadow-xl rounded-b-xs text-xs select-none w-[420px]">
+                  {/* Top Tabs inside Dropdown: 分析组 (前) | 中控 (后) */}
+                  <div className="flex items-center gap-6 px-4 pt-2 border-b border-[#e5e7eb] bg-white">
+                    {/* Tab 1: 分析组 (前) */}
+                    <button
+                      type="button"
+                      onClick={() => setDropdownTab('analysisGroup')}
+                      className={`flex items-center gap-1.5 pb-2 -mb-[1px] cursor-pointer transition-all ${
+                        dropdownTab === 'analysisGroup'
+                          ? 'text-[#0091ff] font-medium border-b-2 border-[#0091ff]'
+                          : 'text-slate-600 hover:text-slate-900 border-b-2 border-transparent'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <div
-                          onClick={handleToggleAllProbes}
-                          title="全选/全不选所有探针链路"
-                          className={`w-3.5 h-3.5 rounded-xs flex items-center justify-center cursor-pointer transition-colors ${
-                            isAllProbesSelected || isAllProbesIndeterminate
-                              ? 'bg-[#0091ff] border border-[#0091ff]'
-                              : 'border border-slate-300 bg-white hover:border-[#0091ff]'
-                          }`}
-                        >
-                          {isAllProbesSelected ? (
-                            <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M2 6l3 3 5-6" />
-                            </svg>
-                          ) : isAllProbesIndeterminate ? (
-                            <div className="w-2 h-0.5 bg-white rounded-full" />
-                          ) : null}
-                        </div>
-                        <span>所有探针</span>
-                      </div>
-                      <ChevronRight
-                        className={`w-3.5 h-3.5 stroke-[2] ${
-                          activeMainCategory === 'probe' ? 'text-[#0091ff]' : 'text-slate-400'
+                      <span>分析组</span>
+                      <span
+                        className={`text-[11px] px-1.5 py-0.2 rounded-full font-medium ${
+                          dropdownTab === 'analysisGroup'
+                            ? 'bg-[#e6f4ff] text-[#0091ff]'
+                            : 'bg-slate-100 text-slate-500'
                         }`}
-                      />
-                    </div>
+                      >
+                        {selectedAnalysisLeaves.length > 0
+                          ? `${selectedAnalysisLeaves.length}条`
+                          : '16条'}
+                      </span>
+                    </button>
 
-                    {/* 分析组 */}
-                    <div
-                      onClick={() => setActiveMainCategory('group')}
-                      className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${
-                        activeMainCategory === 'group'
-                          ? 'text-[#0091ff] font-medium bg-blue-50/40'
-                          : 'text-slate-700 hover:bg-slate-50'
+                    {/* Tab 2: 中控 (后) */}
+                    <button
+                      type="button"
+                      onClick={() => setDropdownTab('controller')}
+                      className={`flex items-center gap-1.5 pb-2 -mb-[1px] cursor-pointer transition-all ${
+                        dropdownTab === 'controller'
+                          ? 'text-[#0091ff] font-medium border-b-2 border-[#0091ff]'
+                          : 'text-slate-600 hover:text-slate-900 border-b-2 border-transparent'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <div
-                          onClick={handleToggleAllGroups}
-                          title="全选/全不选分析组"
-                          className={`w-3.5 h-3.5 rounded-xs flex items-center justify-center cursor-pointer transition-colors ${
-                            isAllGroupsSelected || isAllGroupsIndeterminate
-                              ? 'bg-[#0091ff] border border-[#0091ff]'
-                              : 'border border-slate-300 bg-white hover:border-[#0091ff]'
-                          }`}
-                        >
-                          {isAllGroupsSelected ? (
-                            <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M2 6l3 3 5-6" />
-                            </svg>
-                          ) : isAllGroupsIndeterminate ? (
-                            <div className="w-2 h-0.5 bg-white rounded-full" />
-                          ) : null}
-                        </div>
-                        <span>分析组</span>
-                      </div>
-                      <ChevronRight
-                        className={`w-3.5 h-3.5 stroke-[2] ${
-                          activeMainCategory === 'group' ? 'text-[#0091ff]' : 'text-slate-400'
+                      <span>中控</span>
+                      <span
+                        className={`text-[11px] px-1.5 py-0.2 rounded-full font-medium ${
+                          dropdownTab === 'controller'
+                            ? 'bg-[#e6f4ff] text-[#0091ff]'
+                            : 'bg-slate-100 text-slate-500'
                         }`}
-                      />
-                    </div>
+                      >
+                        {selectedCtrlLeaves.length > 0 ? `${selectedCtrlLeaves.length}条` : '8条'}
+                      </span>
+                    </button>
                   </div>
 
-                  {/* BRANCH A: When activeMainCategory === 'probe' (探针分支) */}
-                  {activeMainCategory === 'probe' && (
-                    <>
-                      {/* Column 2: 探针列表 (172.17.3.87, live55, live56) */}
-                      <div className="w-[165px] py-1 border-r border-[#e5e7eb] min-h-[220px] bg-white">
-                        {probes.map((probe) => {
-                          const selectedCount = probe.interfaces.filter((i) => i.selected).length;
-                          const isProbeAllSelected =
-                            selectedCount === probe.interfaces.length && probe.interfaces.length > 0;
-                          const isProbeIndeterminate =
-                            selectedCount > 0 && selectedCount < probe.interfaces.length;
-                          const isCurrent = probe.id === selectedProbeId;
-
-                          return (
-                            <div
-                              key={probe.id}
-                              onClick={() => setSelectedProbeId(probe.id)}
-                              className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${
-                                isCurrent
-                                  ? 'text-[#0091ff] font-medium'
-                                  : 'text-slate-700 hover:bg-slate-50'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <div
-                                  onClick={(e) => handleToggleProbe(probe.id, e)}
-                                  className={`w-3.5 h-3.5 rounded-xs flex items-center justify-center cursor-pointer transition-colors ${
-                                    isProbeAllSelected || isProbeIndeterminate
-                                      ? 'bg-[#0091ff] border border-[#0091ff]'
-                                      : 'border border-slate-300 bg-white hover:border-[#0091ff]'
-                                  }`}
-                                >
-                                  {isProbeAllSelected ? (
-                                    <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M2 6l3 3 5-6" />
-                                    </svg>
-                                  ) : isProbeIndeterminate ? (
-                                    <div className="w-2 h-0.5 bg-white rounded-full" />
-                                  ) : null}
-                                </div>
-                                <span>{probe.name}</span>
-                              </div>
-                              <ChevronRight
-                                className={`w-3.5 h-3.5 stroke-[2] ${
-                                  isCurrent ? 'text-[#0091ff]' : 'text-slate-400'
-                                }`}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Column 3: 接口列表 (接口1, 接口2) */}
-                      <div className="w-[160px] py-1 min-h-[220px] bg-white">
-                        {activeProbe.interfaces.map((intf) => (
-                          <div
-                            key={intf.id}
-                            onClick={(e) => handleToggleInterface(activeProbe.id, intf.id, e)}
-                            className="flex items-center justify-between px-3 py-2 text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
-                          >
-                            <div className="flex items-center gap-2">
-                              <div
-                                className={`w-3.5 h-3.5 rounded-xs flex items-center justify-center transition-colors ${
-                                  intf.selected
-                                    ? 'bg-[#0091ff] border border-[#0091ff]'
-                                    : 'border border-slate-300 bg-white hover:border-[#0091ff]'
-                                }`}
-                              >
-                                {intf.selected && (
-                                  <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M2 6l3 3 5-6" />
-                                  </svg>
-                                )}
-                              </div>
-                              <span>{intf.name}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
+                  {/* TAB 1 CONTENT: 分析组纵向树形展示 (中控 -> 接口/VLAN分析组 -> 具体分析组) */}
+                  {dropdownTab === 'analysisGroup' && (
+                    <div className="py-2 max-h-[350px] overflow-y-auto">
+                      {analysisTree.map((node) => renderVerticalTreeNode('analysis', node, 0))}
+                    </div>
                   )}
 
-                  {/* BRANCH B: When activeMainCategory === 'group' (分析组分支 - 3个中控) */}
-                  {activeMainCategory === 'group' && (
-                    <>
-                      {/* Column 2: 3个中控列表 */}
-                      <div className="w-[165px] py-1 border-r border-[#e5e7eb] min-h-[220px] bg-white">
-                        {controllers.map((ctrl) => {
-                          const ctrlAllGroups = ctrl.categories.flatMap((c) => c.groups);
-                          const selCount = ctrlAllGroups.filter((g) => g.selected).length;
-                          const isCtrlAll = selCount === ctrlAllGroups.length && ctrlAllGroups.length > 0;
-                          const isCtrlIndeterminate = selCount > 0 && selCount < ctrlAllGroups.length;
-                          const isCurrent = ctrl.id === selectedControllerId;
-
-                          return (
-                            <div
-                              key={ctrl.id}
-                              onClick={() => setSelectedControllerId(ctrl.id)}
-                              className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${
-                                isCurrent
-                                  ? 'text-[#0091ff] font-medium bg-blue-50/30'
-                                  : 'text-slate-700 hover:bg-slate-50'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 truncate">
-                                <div
-                                  onClick={(e) => handleToggleController(ctrl.id, e)}
-                                  className={`w-3.5 h-3.5 shrink-0 rounded-xs flex items-center justify-center cursor-pointer transition-colors ${
-                                    isCtrlAll || isCtrlIndeterminate
-                                      ? 'bg-[#0091ff] border border-[#0091ff]'
-                                      : 'border border-slate-300 bg-white hover:border-[#0091ff]'
-                                  }`}
-                                >
-                                  {isCtrlAll ? (
-                                    <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M2 6l3 3 5-6" />
-                                    </svg>
-                                  ) : isCtrlIndeterminate ? (
-                                    <div className="w-2 h-0.5 bg-white rounded-full" />
-                                  ) : null}
-                                </div>
-                                <span className="truncate" title={ctrl.name}>{ctrl.name}</span>
-                              </div>
-                              <ChevronRight
-                                className={`w-3.5 h-3.5 shrink-0 stroke-[2] ${
-                                  isCurrent ? 'text-[#0091ff]' : 'text-slate-400'
-                                }`}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Column 3: 接口分析组 & VLAN分析组 */}
-                      <div className="w-[145px] py-1 border-r border-[#e5e7eb] min-h-[220px] bg-white">
-                        {activeController.categories.map((cat) => {
-                          const selCount = cat.groups.filter((g) => g.selected).length;
-                          const isCatAll = selCount === cat.groups.length && cat.groups.length > 0;
-                          const isCatIndeterminate = selCount > 0 && selCount < cat.groups.length;
-                          const isCurrent = cat.id === selectedGroupCategoryId;
-
-                          return (
-                            <div
-                              key={cat.id}
-                              onClick={() => setSelectedGroupCategoryId(cat.id)}
-                              className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${
-                                isCurrent
-                                  ? 'text-[#0091ff] font-medium bg-blue-50/30'
-                                  : 'text-slate-700 hover:bg-slate-50'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <div
-                                  onClick={(e) => handleToggleGroupCategory(cat.id, e)}
-                                  className={`w-3.5 h-3.5 rounded-xs flex items-center justify-center cursor-pointer transition-colors ${
-                                    isCatAll || isCatIndeterminate
-                                      ? 'bg-[#0091ff] border border-[#0091ff]'
-                                      : 'border border-slate-300 bg-white hover:border-[#0091ff]'
-                                  }`}
-                                >
-                                  {isCatAll ? (
-                                    <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M2 6l3 3 5-6" />
-                                    </svg>
-                                  ) : isCatIndeterminate ? (
-                                    <div className="w-2 h-0.5 bg-white rounded-full" />
-                                  ) : null}
-                                </div>
-                                <span>{cat.name}</span>
-                              </div>
-                              <ChevronRight
-                                className={`w-3.5 h-3.5 stroke-[2] ${
-                                  isCurrent ? 'text-[#0091ff]' : 'text-slate-400'
-                                }`}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Column 4: 具体分析组名称列表 */}
-                      <div className="w-[285px] py-1 min-h-[220px] max-h-[260px] overflow-y-auto bg-white">
-                        {activeCategory.groups.map((group) => (
-                          <div
-                            key={group.id}
-                            onClick={(e) => handleToggleGroupItem(group.id, e)}
-                            className="flex items-center justify-between px-3 py-2 text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
-                          >
-                            <div className="flex items-center gap-2 truncate">
-                              <div
-                                className={`w-3.5 h-3.5 shrink-0 rounded-xs flex items-center justify-center transition-colors ${
-                                  group.selected
-                                    ? 'bg-[#0091ff] border border-[#0091ff]'
-                                    : 'border border-slate-300 bg-white hover:border-[#0091ff]'
-                                }`}
-                              >
-                                {group.selected && (
-                                  <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M2 6l3 3 5-6" />
-                                  </svg>
-                                )}
-                              </div>
-
-                              {/* Blue Topology / Network Link Icon */}
-                              <svg
-                                className="w-3.5 h-3.5 text-[#0091ff] shrink-0"
-                                viewBox="0 0 16 16"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                              >
-                                <circle cx="3" cy="12" r="2" fill="currentColor" />
-                                <circle cx="3" cy="4" r="2" fill="currentColor" />
-                                <circle cx="12" cy="8" r="2" fill="currentColor" />
-                                <path d="M3 6v4M5 4.5l5 2.5M5 11.5l5-2.5" stroke="currentColor" strokeWidth="1.4" />
-                              </svg>
-
-                              <span className="truncate text-slate-700 text-xs" title={group.name}>
-                                {group.name}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
+                  {/* TAB 2 CONTENT: 中控纵向树形展示 (环境 -> 探针 -> 接口) */}
+                  {dropdownTab === 'controller' && (
+                    <div className="py-2 max-h-[350px] overflow-y-auto">
+                      {controllerTree.map((node) => renderVerticalTreeNode('controller', node, 0))}
+                    </div>
                   )}
                 </div>
               )}
             </div>
 
             {/* ========================================================= */}
-            {/* SEARCH RESULTS SECTION (FIGURE 1 & FIGURE 2 INTEGRATED)   */}
+            {/* SEARCH RESULTS SECTION                                    */}
             {/* ========================================================= */}
             <div className="mt-5 border border-[#e5e7eb] rounded-xs overflow-hidden shadow-xs bg-white">
-              {/* History Search Record Tag Bar (Figure 2 Style) */}
+              {/* History Search Record Tag Bar */}
               <div className="px-4 py-2 bg-[#f8fafc] border-b border-[#e5e7eb] flex items-center justify-between text-xs text-slate-600">
                 <div className="flex items-center gap-2">
                   <span className="text-slate-500 font-normal">历史记录：</span>
@@ -1312,80 +1396,56 @@ export default function App() {
               {/* Multi-Controller Result Tabs Bar (Light-colored Tab Style) */}
               <div className="bg-[#f5f7fa] px-3 pt-2 flex items-center justify-between border-b border-[#e5e7eb]">
                 <div className="flex items-center gap-1.5 overflow-x-auto">
-                  {controllersWithSelectedGroups.length > 0 ? (
-                    controllersWithSelectedGroups.map((ctrl) => {
-                      const count = ctrl.categories.reduce(
-                        (acc, cat) => acc + cat.groups.filter((g) => g.selected).length,
-                        0
-                      );
-                      const isActive = ctrl.id === activeResultCtrlId;
+                  {resultControllers.map((ctrl) => {
+                    const isActive = ctrl.id === activeResultCtrlId;
 
-                      return (
-                        <div
-                          key={ctrl.id}
-                          onClick={() => setActiveResultCtrlId(ctrl.id)}
-                          className={`flex items-center gap-2 px-3.5 py-2 text-xs rounded-t cursor-pointer transition-all ${
-                            isActive
-                              ? 'bg-white text-slate-800 font-medium border-t-2 border-t-[#0091ff] border-x border-[#e5e7eb] -mb-[1px] shadow-2xs'
-                              : 'bg-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-200/50'
+                    return (
+                      <div
+                        key={ctrl.id}
+                        onClick={() => setActiveResultCtrlId(ctrl.id)}
+                        className={`flex items-center gap-2 px-3.5 py-2 text-xs rounded-t cursor-pointer transition-all ${
+                          isActive
+                            ? 'bg-white text-slate-800 font-medium border-t-2 border-t-[#0091ff] border-x border-[#e5e7eb] -mb-[1px] shadow-2xs'
+                            : 'bg-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-200/50'
+                        }`}
+                      >
+                        {/* Controller link icon */}
+                        <svg
+                          className={`w-3.5 h-3.5 ${isActive ? 'text-[#0091ff]' : 'text-slate-400'}`}
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                        >
+                          <rect x="2" y="3" width="12" height="9" rx="1.5" />
+                          <path d="M5 12v2h6v-2" />
+                          <path d="M5 6h2v3H5z" fill="currentColor" stroke="none" />
+                          <path d="M9 6h2v3H9z" fill="currentColor" stroke="none" />
+                        </svg>
+
+                        <span>{ctrl.name}</span>
+
+                        {/* Result Count Badge */}
+                        <span
+                          className={`px-1.5 py-0.2 rounded-full text-[11px] tabular-nums font-medium ${
+                            isActive ? 'bg-[#0091ff] text-white' : 'bg-slate-200 text-slate-600'
                           }`}
                         >
-                          {/* Controller link icon */}
-                          <svg
-                            className={`w-3.5 h-3.5 ${isActive ? 'text-[#0091ff]' : 'text-slate-400'}`}
-                            viewBox="0 0 16 16"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.6"
-                          >
-                            <rect x="2" y="3" width="12" height="9" rx="1.5" />
-                            <path d="M5 12v2h6v-2" />
-                            <path d="M5 6h2v3H5z" fill="currentColor" stroke="none" />
-                            <path d="M9 6h2v3H9z" fill="currentColor" stroke="none" />
-                          </svg>
+                          {ctrl.count}
+                        </span>
 
-                          <span>{ctrl.name}</span>
-
-                          {/* Result Count Badge */}
-                          <span
-                            className={`px-1.5 py-0.2 rounded-full text-[11px] tabular-nums font-medium ${
-                              isActive ? 'bg-[#0091ff] text-white' : 'bg-slate-200 text-slate-600'
-                            }`}
-                          >
-                            {count}
-                          </span>
-
-                          {/* Close Tab Icon */}
-                          <button
-                            type="button"
-                            onClick={(e) => handleCloseResultTab(ctrl.id, e)}
-                            className="ml-1 text-slate-400 hover:text-slate-700 cursor-pointer"
-                            title="关闭此中控结果"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    /* Default active tab when no controller is explicitly selected */
-                    <div className="flex items-center gap-2 px-3.5 py-2 text-xs rounded-t bg-white text-slate-800 font-medium border-t-2 border-t-[#0091ff] border-x border-[#e5e7eb] -mb-[1px] shadow-2xs">
-                      <svg
-                        className="w-3.5 h-3.5 text-[#0091ff]"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                      >
-                        <rect x="2" y="3" width="12" height="9" rx="1.5" />
-                        <path d="M5 12v2h6v-2" />
-                      </svg>
-                      <span>{controllers[0].name}</span>
-                      <span className="px-1.5 py-0.2 rounded-full text-[11px] bg-[#0091ff] text-white">
-                        {controllers[0].categories[0].groups.length}
-                      </span>
-                    </div>
-                  )}
+                        {/* Close Tab Icon */}
+                        <button
+                          type="button"
+                          onClick={(e) => handleCloseResultTab(ctrl.id, e)}
+                          className="ml-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                          title="关闭此中控结果"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1398,15 +1458,15 @@ export default function App() {
                         <input
                           type="checkbox"
                           checked={
-                            currentResultGroups.length > 0 &&
-                            selectedRowIds.length === currentResultGroups.length
+                            currentTableRows.length > 0 &&
+                            selectedRowIds.length === currentTableRows.length
                           }
                           onChange={handleSelectAllRows}
                           className="rounded-xs text-[#0091ff] focus:ring-0 cursor-pointer w-3.5 h-3.5 border-slate-300"
                         />
                       </th>
 
-                      {/* 对象信息 (Modified to display Analysis Group Name as requested!) */}
+                      {/* 对象信息 (Analysis Group Name) */}
                       <th className="py-3 px-3 min-w-[240px] text-slate-700">
                         <div className="flex items-center gap-1">
                           <span>对象信息 (分析组名称)</span>
@@ -1546,20 +1606,20 @@ export default function App() {
                       </th>
 
                       {/* 操作 */}
-                      <th className="py-2.5 px-4 text-center">
+                      <th className="py-3 px-4 text-center">
                         <span>操作</span>
                       </th>
                     </tr>
                   </thead>
 
                   <tbody className="divide-y divide-[#f0f2f5] text-slate-700">
-                    {currentResultGroups.length > 0 ? (
-                      currentResultGroups.map((group) => {
-                        const isChecked = selectedRowIds.includes(group.id);
+                    {currentTableRows.length > 0 ? (
+                      currentTableRows.map((row) => {
+                        const isChecked = selectedRowIds.includes(row.id);
 
                         return (
                           <tr
-                            key={group.id}
+                            key={row.id}
                             className={`hover:bg-blue-50/20 transition-colors ${
                               isChecked ? 'bg-blue-50/30' : ''
                             }`}
@@ -1569,7 +1629,7 @@ export default function App() {
                               <input
                                 type="checkbox"
                                 checked={isChecked}
-                                onChange={() => handleToggleRow(group.id)}
+                                onChange={() => handleToggleRow(row.id)}
                                 className="rounded-xs text-[#0091ff] focus:ring-0 cursor-pointer w-3.5 h-3.5 border-slate-300"
                               />
                             </td>
@@ -1584,77 +1644,77 @@ export default function App() {
                                   stroke="currentColor"
                                   strokeWidth="1.8"
                                 >
-                                  <circle cx="3" cy="12" r="2" fill="currentColor" />
-                                  <circle cx="3" cy="4" r="2" fill="currentColor" />
-                                  <circle cx="12" cy="8" r="2" fill="currentColor" />
+                                  <circle cx="3" cy="12" r="1.8" fill="currentColor" />
+                                  <circle cx="3" cy="4" r="1.8" fill="currentColor" />
+                                  <circle cx="12" cy="8" r="1.8" fill="currentColor" />
                                   <path d="M3 6v4M5 4.5l5 2.5M5 11.5l5-2.5" stroke="currentColor" strokeWidth="1.4" />
                                 </svg>
                                 <span className="font-medium text-slate-800 hover:text-[#0091ff] cursor-pointer">
-                                  {group.name}
+                                  {row.name}
                                 </span>
                               </div>
                             </td>
 
                             {/* 主机IP */}
                             <td className="py-4 px-3 font-semibold text-slate-900 tabular-nums">
-                              {group.ip}
+                              {row.ip || '172.17.3.2'}
                             </td>
 
                             {/* 链路 */}
-                            <td className="py-4 px-3 text-slate-600 truncate max-w-[150px]" title={group.link}>
-                              {group.link}
+                            <td className="py-4 px-3 text-slate-600 truncate max-w-[150px]" title={row.link}>
+                              {row.link || 'Core Switch(V1003)'}
                             </td>
 
                             {/* 总流量 */}
                             <td className="py-4 px-3 font-mono text-slate-800 tabular-nums">
-                              {group.totalFlow}
+                              {row.totalFlow || '13.11 MB'}
                             </td>
 
                             {/* 速率 */}
                             <td className="py-4 px-3 font-mono text-slate-800 tabular-nums">
-                              {group.speed}
+                              {row.speed || '366.59 Kbps'}
                             </td>
 
                             {/* 数据包数 */}
                             <td className="py-4 px-3 font-mono text-slate-800 tabular-nums">
-                              {group.packetCount.toLocaleString()}
+                              {(row.packetCount || 33517).toLocaleString()}
                             </td>
 
                             {/* 平均包率 */}
                             <td className="py-4 px-3 font-mono text-slate-800 tabular-nums">
-                              {group.avgPacketRate}
+                              {row.avgPacketRate || '111.72 pps'}
                             </td>
 
                             {/* 网络时延 */}
                             <td className="py-4 px-3 font-mono text-slate-800 tabular-nums">
-                              {group.networkLatency}
+                              {row.networkLatency || '4.09 ms'}
                             </td>
 
                             {/* 响应时间-服务器 */}
                             <td className="py-4 px-3 font-mono text-slate-800 tabular-nums">
-                              {group.serverRespTime}
+                              {row.serverRespTime || '50.09 ms'}
                             </td>
 
-                            {/* 会话状态 (Green 活跃 badge matching Figure 1) */}
+                            {/* 会话状态 (Green 活跃 badge) */}
                             <td className="py-4 px-3">
                               <span className="inline-flex items-center justify-center bg-[#00b42a] text-white text-[11px] font-medium px-3 py-0.5 rounded-xs shadow-2xs">
-                                {group.status}
+                                {row.status || '活跃'}
                               </span>
                             </td>
 
                             {/* 会话开始时间 */}
                             <td className="py-4 px-3 font-mono text-slate-600 text-[11px] tabular-nums">
-                              {group.startTime}
+                              {row.startTime || '2026-11-04 09:35:32.144030'}
                             </td>
 
                             {/* 最后更新时间 */}
                             <td className="py-4 px-3 font-mono text-slate-600 text-[11px] tabular-nums">
-                              {group.lastUpdated}
+                              {row.lastUpdated || '2026-11-04 17:05:59.991396'}
                             </td>
 
                             {/* 站点 */}
                             <td className="py-4 px-3 text-slate-600">
-                              {group.site}
+                              {row.site || 'Server172.17'}
                             </td>
 
                             {/* 操作 (Download Packet, Jump Arrow) */}
@@ -1682,7 +1742,7 @@ export default function App() {
                     ) : (
                       <tr>
                         <td colSpan={15} className="py-8 text-center text-slate-400">
-                          暂无匹配的分析组数据，请在下拉框中选择分析组或输入关键字进行搜索
+                          暂无匹配的数据，请在下拉框中选择分析组或输入关键字进行搜索
                         </td>
                       </tr>
                     )}
@@ -1693,7 +1753,7 @@ export default function App() {
               {/* Table Summary Footer */}
               <div className="px-4 py-2 bg-[#fcfdfe] border-t border-[#e5e7eb] flex items-center justify-between text-xs text-slate-500">
                 <span>
-                  当前中控展示 {currentResultGroups.length} 条记录 (已勾选 {selectedRowIds.length} 项)
+                  当前中控展示 {currentTableRows.length} 条记录 (已勾选 {selectedRowIds.length} 项)
                 </span>
                 <div className="flex items-center gap-2 text-slate-400 text-xs">
                   <span>每页 10 条</span>
