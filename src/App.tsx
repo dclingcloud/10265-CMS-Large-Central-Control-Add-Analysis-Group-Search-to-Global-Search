@@ -1484,16 +1484,6 @@ export default function App() {
                         </div>
                       </th>
 
-                      {/* 链路 */}
-                      <th
-                        onClick={() => handleSort('link')}
-                        className="py-2.5 px-3 cursor-pointer hover:bg-slate-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-1">
-                          <span>链路</span>
-                          <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                        </div>
-                      </th>
 
                       {/* 总流量 */}
                       <th
@@ -1660,10 +1650,6 @@ export default function App() {
                               {row.ip || '172.17.3.2'}
                             </td>
 
-                            {/* 链路 */}
-                            <td className="py-4 px-3 text-slate-600 truncate max-w-[150px]" title={row.link}>
-                              {row.link || 'Core Switch(V1003)'}
-                            </td>
 
                             {/* 总流量 */}
                             <td className="py-4 px-3 font-mono text-slate-800 tabular-nums">
@@ -1741,7 +1727,7 @@ export default function App() {
                       })
                     ) : (
                       <tr>
-                        <td colSpan={15} className="py-8 text-center text-slate-400">
+                        <td colSpan={14} className="py-8 text-center text-slate-400">
                           暂无匹配的数据，请在下拉框中选择分析组或输入关键字进行搜索
                         </td>
                       </tr>
